@@ -205,6 +205,11 @@ Top 10 high-intent roles:
 dotnet ef migrations add <Name> --project src/JobScout.Data --startup-project src/JobScout.Worker
 ```
 
+## Branches
+
+- **`main`** — stable; protected (changes land via pull request).
+- **`dev`** — active development; branch features off here and PR into `main` for stable points.
+
 ## Roadmap
 
 - ~~A small UI over the ranked store~~ ✓ Blazor dashboard with per-posting score breakdown.
