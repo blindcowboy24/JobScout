@@ -1,0 +1,120 @@
+@page "/posting/{Id:int}"
+@inject IPostingReadStore Store
+@inject NavigationManager Nav
+
+<PageTitle>@(_detail?.Posting.Title ?? "Posting")</PageTitle>
+
+<p><a class="back" href="/">← all postings</a></p>
+
+@if (_loading)
+{
+    <p class="muted">Loading…</p>
+}
+else if (_detail is null)
+{
+    <h1>Not found</h1>
+    <p class="muted">No tracked posting with id @Id.</p>
+}
+else
+{
+    var d = _detail;
+    var p = d.Posting;
+
+    <div class="detail-head">
+        <ScoreBadge Score="p.Score" Band="p.Band" />
+        <div>
+            <h1>@p.Title</h1>
+            <div class="sub">
+                <span class="src src-@p.Source.ToString().ToLowerInvariant()">@p.Source</span>
+                <b>@p.Company</b>
+                @if (!string.IsNullOrWhiteSpace(p.Location)) { <span class="muted">· @p.Location</span> }
+                @if (!p.IsActive) { <span class="tag-closed">closed</span> }
+            </div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(p.Url))
+        {
+            <a class="apply" href="@p.Url" target="_blank" rel="noopener">Open posting ↗</a>
+        }
+    </div>
+
+    <section class="meta-grid">
+        <div><span class="k">First seen</span><span class="v">@p.FirstSeen.ToString("yyyy-MM-dd")</span></div>
+        <div><span class="k">Last seen</span><span class="v">@p.LastSeen.ToString("yyyy-MM-dd")</span></div>
+        <div><span class="k">Observations</span><span class="v">@d.ObservationCount</span></div>
+        <div><span class="k">Reposts</span><span class="v">@p.RepostCount</span></div>
+        <div><span class="k">Salary</span><span class="v">@(d.SalarySummary ?? "not disclosed")</span></div>
+        <div><span class="k">Deadline</span><span class="v">@(d.ApplicationDeadline?.ToString("yyyy-MM-dd") ?? "none")</span></div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(d.Description))
+    {
+        <section class="description">
+            <h2>Description</h2>
+            <p class="desc-text">@Snippet(d.Description!)</p>
+        </section>
+    }
+
+    <section class="breakdown">
+        <h2>Why this score</h2>
+        <table class="factors">
+            <tbody>
+                @foreach (var f in d.Factors)
+                {
+                    <tr>
+                        <td class="f-name">@f.Name</td>
+                        <td class="f-delta @DeltaClass(f.Delta)">@DeltaText(f.Delta)</td>
+                        <td class="f-note muted">@f.Note</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td class="f-name"><b>Score</b></td>
+                    <td class="f-delta"><b>@p.Score.ToString("0.0", CultureInfo.InvariantCulture)</b></td>
+                    <td class="f-note muted">@p.Band intent · clamped 0–100</td>
+                </tr>
+            </tfoot>
+        </table>
+    </section>
+
+    @if (d.Timeline.Count > 0)
+    {
+        <section class="timeline">
+            <h2>History</h2>
+            <div class="spark">
+                @foreach (var s in d.Timeline)
+                {
+                    <span class="bar @(s.WasPresent ? "present" : "absent")"
+                          style="height:@(BarHeight(s.Score))%"
+                          title="@s.ObservedAt.ToString("yyyy-MM-dd HH:mm") · @(s.WasPresent ? "present" : "gone") · @s.Score.ToString("0.0", CultureInfo.InvariantCulture)"></span>
+                }
+            </div>
+            <p class="muted">@d.Timeline.Count observation(s). Bar height = score; faded = absent from feed that crawl.</p>
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private PostingDetail? _detail;
+    private bool _loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _detail = await Store.GetDetailAsync(Id, default);
+        _loading = false;
+    }
+
+    private static string DeltaText(double delta) =>
+        delta == 0 ? "0" : delta.ToString("+0.0;-0.0", CultureInfo.InvariantCulture);
+
+    private static string DeltaClass(double delta) =>
+        delta > 0 ? "pos" : delta < 0 ? "neg" : "zero";
+
+    private static double BarHeight(double score) => Math.Clamp(score, 4, 100);
+
+    private static string Snippet(string text, int max = 600) =>
+        text.Length <= max ? text : text[..max].TrimEnd() + "…";
+}

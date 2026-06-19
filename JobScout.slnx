@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/JobScout.Core/JobScout.Core.csproj" />
+    <Project Path="src/JobScout.Data/JobScout.Data.csproj" />
+    <Project Path="src/JobScout.Ingestion/JobScout.Ingestion.csproj" />
+    <Project Path="src/JobScout.Worker/JobScout.Worker.csproj" />
+    <Project Path="src/JobScout.Web/JobScout.Web.csproj" />
+  </Folder>
+</Solution>

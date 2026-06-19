@@ -1,0 +1,8 @@
+<span class="badge badge-@Band.ToString().ToLowerInvariant()" title="@Band intent">
+    @Score.ToString("0", CultureInfo.InvariantCulture)
+</span>
+
+@code {
+    [Parameter] public double Score { get; set; }
+    [Parameter] public IntentBand Band { get; set; }
+}

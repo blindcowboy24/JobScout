@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Keeps real API keys out of the (public) repo — secrets live in the user profile, never committed. -->
+    <UserSecretsId>jobscout-web-secrets</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JobScout.Core\JobScout.Core.csproj" />
+    <ProjectReference Include="..\JobScout.Data\JobScout.Data.csproj" />
+    <ProjectReference Include="..\JobScout.Ingestion\JobScout.Ingestion.csproj" />
+    <ProjectReference Include="..\JobScout.Worker\JobScout.Worker.csproj" />
+  </ItemGroup>
+
+</Project>

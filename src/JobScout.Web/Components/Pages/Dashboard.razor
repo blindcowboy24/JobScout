@@ -1,0 +1,224 @@
+@page "/"
+@inject IPostingReadStore Store
+
+<PageTitle>JobScout — ranked postings</PageTitle>
+
+<h1>Ranked postings</h1>
+
+@if (_stats is { } s)
+{
+    <section class="stats">
+        <div class="stat">
+            <div class="stat-value">@s.TotalActive</div>
+            <div class="stat-label">active</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">@s.TotalTracked</div>
+            <div class="stat-label">tracked all-time</div>
+        </div>
+        @foreach (var band in new[] { IntentBand.High, IntentBand.Medium, IntentBand.Low })
+        {
+            <div class="stat">
+                <div class="stat-value badge badge-@band.ToString().ToLowerInvariant()">
+                    @(s.ActiveByBand.TryGetValue(band, out var n) ? n : 0)
+                </div>
+                <div class="stat-label">@band.ToString().ToLowerInvariant() intent</div>
+            </div>
+        }
+        <div class="stat stat-sources">
+            @foreach (var src in s.ActiveBySource.OrderByDescending(kv => kv.Value))
+            {
+                <span class="chip">@src.Key <b>@src.Value</b></span>
+            }
+        </div>
+        <div class="stat stat-crawl">
+            <div class="stat-label">last crawl</div>
+            <div class="stat-value-sm">@(s.LastCrawl?.ToString("yyyy-MM-dd HH:mm 'UTC'") ?? "—")</div>
+        </div>
+    </section>
+}
+
+<section class="filters">
+    <input class="search" type="search" placeholder="Search all — title, company, location, description (e.g. .net / c#)"
+           title="Broad relevance search across all fields incl. the description. '/' or ',' = either; spaces = all."
+           @bind="_search" @bind:after="ReloadAsync" />
+
+    <select @bind="_sort" @bind:after="ReloadAsync">
+        <option value="@PostingSort.ScoreDescending">Highest intent</option>
+        <option value="@PostingSort.ScoreAscending">Lowest intent</option>
+        <option value="@PostingSort.NewestFirst">Newest</option>
+        <option value="@PostingSort.RecentlySeen">Recently seen</option>
+        <option value="@PostingSort.TitleAscending">Title A–Z</option>
+    </select>
+
+    <label class="toggle">
+        <input type="checkbox" @bind="_remoteOnly" @bind:after="ReloadAsync" />
+        🏠 remote only
+    </label>
+
+    <label class="toggle">
+        <input type="checkbox" @bind="_activeOnly" @bind:after="ReloadAsync" />
+        active only
+    </label>
+
+    @if (HasAnyFilter)
+    {
+        <button class="clear-btn" @onclick="ClearAsync">Clear filters ✕</button>
+    }
+</section>
+
+@if (_loading)
+{
+    <p class="muted">Loading…</p>
+}
+else
+{
+    <p class="muted result-count">@_total posting(s) match · showing @_rows.Count</p>
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Score</th>
+                <th>Title</th>
+                <th>Company</th>
+                <th>Source</th>
+                <th>Location</th>
+                <th class="num">Age</th>
+                <th class="num">Repost</th>
+                <th>Salary</th>
+            </tr>
+            <tr class="filter-row">
+                <th><input type="number" class="cf cf-num" placeholder="≥" min="0" max="100" @bind="_minScore" @bind:after="ReloadAsync" /></th>
+                <th><input type="text" class="cf" placeholder="filter…" @bind="_titleFilter" @bind:after="ReloadAsync" /></th>
+                <th><input type="text" class="cf" placeholder="filter…" @bind="_companyFilter" @bind:after="ReloadAsync" /></th>
+                <th>
+                    <select class="cf" @bind="_sourceFilter" @bind:after="ReloadAsync">
+                        <option value="">all</option>
+                        @foreach (var src in Enum.GetValues<JobSource>())
+                        {
+                            <option value="@src">@src</option>
+                        }
+                    </select>
+                </th>
+                <th><input type="text" class="cf" placeholder="filter…" @bind="_locationFilter" @bind:after="ReloadAsync" /></th>
+                <th><input type="number" class="cf cf-num" placeholder="≤ d" min="0" @bind="_maxAge" @bind:after="ReloadAsync" /></th>
+                <th><input type="number" class="cf cf-num" placeholder="≤" min="0" @bind="_maxReposts" @bind:after="ReloadAsync" /></th>
+                <th>
+                    <select class="cf" @bind="_salaryFilter" @bind:after="ReloadAsync">
+                        <option value="">any</option>
+                        <option value="yes">disclosed</option>
+                        <option value="no">none</option>
+                    </select>
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_rows.Count == 0)
+            {
+                <tr><td colspan="8" class="muted empty">No postings match these filters.</td></tr>
+            }
+            @foreach (var p in _rows)
+            {
+                <tr @onclick="() => Open(p.Id)" class="row @(p.IsActive ? "" : "closed")">
+                    <td><ScoreBadge Score="p.Score" Band="p.Band" /></td>
+                    <td class="title">@p.Title</td>
+                    <td>@p.Company</td>
+                    <td><span class="src src-@p.Source.ToString().ToLowerInvariant()">@p.Source</span></td>
+                    <td class="muted">
+                        @if (p.Remote == RemoteMode.Remote)
+                        {
+                            <span class="rtag rtag-remote">Remote</span>
+                        }
+                        else if (p.Remote == RemoteMode.Hybrid)
+                        {
+                            <span class="rtag rtag-hybrid">Hybrid</span>
+                        }
+                        @(string.IsNullOrWhiteSpace(p.Location) ? "—" : p.Location)
+                    </td>
+                    <td class="num">@AgeDays(p.FirstSeen)d</td>
+                    <td class="num">@(p.RepostCount > 0 ? p.RepostCount.ToString() : "—")</td>
+                    <td>@SalaryCell(p)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private string? _search;
+    private string _sourceFilter = "";
+    private string _titleFilter = "";
+    private string _companyFilter = "";
+    private string _locationFilter = "";
+    private string _salaryFilter = "";
+    private double? _minScore;
+    private int? _maxAge;
+    private int? _maxReposts;
+    private PostingSort _sort = PostingSort.ScoreDescending;
+    private bool _activeOnly = true;
+    private bool _remoteOnly;
+
+    private IReadOnlyList<PostingListItem> _rows = [];
+    private StoreStats? _stats;
+    private int _total;
+    private bool _loading = true;
+
+    private bool HasAnyFilter =>
+        !string.IsNullOrWhiteSpace(_search) || !string.IsNullOrWhiteSpace(_sourceFilter) ||
+        !string.IsNullOrWhiteSpace(_titleFilter) || !string.IsNullOrWhiteSpace(_companyFilter) ||
+        !string.IsNullOrWhiteSpace(_locationFilter) || !string.IsNullOrWhiteSpace(_salaryFilter) ||
+        _minScore is not null || _maxAge is not null || _maxReposts is not null || _remoteOnly || !_activeOnly;
+
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        var filter = new PostingFilter
+        {
+            Search = _search,
+            Source = Enum.TryParse<JobSource>(_sourceFilter, out var src) ? src : null,
+            TitleContains = _titleFilter,
+            CompanyContains = _companyFilter,
+            LocationContains = _locationFilter,
+            MinScore = _minScore,
+            MaxAgeDays = _maxAge,
+            MaxReposts = _maxReposts,
+            HasSalary = _salaryFilter switch { "yes" => true, "no" => false, _ => null },
+            RemoteOnly = _remoteOnly,
+            Sort = _sort,
+            ActiveOnly = _activeOnly,
+            Take = 200,
+        };
+
+        _stats = await Store.GetStatsAsync(default);
+        _total = await Store.CountAsync(filter, default);
+        _rows = await Store.QueryAsync(filter, default);
+        _loading = false;
+    }
+
+    private Task ClearAsync()
+    {
+        _search = _titleFilter = _companyFilter = _locationFilter = "";
+        _sourceFilter = _salaryFilter = "";
+        _minScore = null;
+        _maxAge = null;
+        _maxReposts = null;
+        _remoteOnly = false;
+        _activeOnly = true;
+        return ReloadAsync();
+    }
+
+    private void Open(int id) => Nav.NavigateTo($"/posting/{id}");
+
+    private static int AgeDays(DateTimeOffset firstSeen) =>
+        Math.Max(0, (int)(DateTimeOffset.UtcNow - firstSeen).TotalDays);
+
+    private static string SalaryCell(PostingListItem p) => p.HasSalaryBand switch
+    {
+        true => "✓ disclosed",
+        false => "—",
+        null => "·",
+    };
+}
